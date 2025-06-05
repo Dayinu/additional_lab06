@@ -1,0 +1,37 @@
+name: Windows Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-windows:
+    name: Build for Windows
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SFML dependencies
+      run: |
+        choco install mingw -y --version 12.2.0
+        choco install cmake -y --installargs 'ADD_CMAKE_TO_PATH=System'
+
+    - name: Configure CMake
+      shell: cmd
+      run: |
+        cmake -S . -B build -G "MinGW Makefiles"
+
+    - name: Build project
+      shell: cmd
+      run: |
+        cmake --build build --config Release
+
+    - name: Verify artifacts
+      shell: cmd
+      run: |
+        dir build\Release
+        if exist build\Release\arkanoid.exe (exit 0) else (exit 1)

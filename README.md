@@ -43,4 +43,72 @@ hint:
 hint:   git branch -m <name>
 Initialized empty Git repository in /home/linux/add_lab06/16-Games/.git/
 
+┌──(linux㉿kali)-[~/add_lab06/16-Games]
+└─$ git add .        
+                                                                             
+┌──(linux㉿kali)-[~/add_lab06/16-Games]
+└─$ git commit -m "Initial commit"      
+[master (root-commit) 548801f] Initial commit
+ 3 files changed, 206 insertions(+)
+ create mode 100644 CMakeLists.txt
+ create mode 100644 README.md
+ create mode 100644 main.cpp
+                                                                             
+┌──(linux㉿kali)-[~/add_lab06/16-Games]
+└─$ git branch main  
+                                                                             
+┌──(linux㉿kali)-[~/add_lab06/16-Games]
+└─$ git push -u origin main
+Enumerating objects: 5, done.
+Counting objects: 100% (5/5), done.
+Delta compression using up to 2 threads
+Compressing objects: 100% (5/5), done.
+Writing objects: 100% (5/5), 2.40 KiB | 491.00 KiB/s, done.
+Total 5 (delta 0), reused 0 (delta 0), pack-reused 0 (from 0)
+To github.com:Dayinu/additional_lab06.git
+ * [new branch]      main -> main
+branch 'main' set up to track 'origin/main'.
+
+$ mkdir -p .github/workflows
+
+$ cat > .github/workflows/ci.yml << 'EOF'
+name: Windows Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-windows:
+    name: Build for Windows
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SFML dependencies
+      run: |
+        choco install mingw -y --version 12.2.0
+        choco install cmake -y --installargs 'ADD_CMAKE_TO_PATH=System'
+
+    - name: Configure CMake
+      shell: cmd
+      run: |
+        cmake -S . -B build -G "MinGW Makefiles"
+
+    - name: Build project
+      shell: cmd
+      run: |
+        cmake --build build --config Release
+
+    - name: Verify artifacts
+      shell: cmd
+      run: |
+        dir build\Release
+        if exist build\Release\arkanoid.exe (exit 0) else (exit 1)
+EOF
+
 ```
