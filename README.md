@@ -111,4 +111,29 @@ jobs:
         if exist build\Release\arkanoid.exe (exit 0) else (exit 1)
 EOF
 
+$ git add .                                                                
+                                                                             
+ git commit -m "Step 2"        
+[main 1311801] Step 2
+ 11 files changed, 110 insertions(+), 80 deletions(-)
+ create mode 100644 .github/workflows/ci.yml
+ create mode 100644 images/background.jpg
+ create mode 100644 images/ball.png
+ create mode 100644 images/block01.png
+ create mode 100644 images/block02.png
+ create mode 100644 images/block03.png
+ create mode 100644 images/block04.png
+ create mode 100644 images/block05.png
+ create mode 100644 images/paddle.png
+
+$ git push origin main
+Enumerating objects: 19, done.
+Counting objects: 100% (19/19), done.
+Delta compression using up to 2 threads
+Compressing objects: 100% (14/14), done.
+Writing objects: 100% (16/16), 21.09 KiB | 1.51 MiB/s, done.
+Total 16 (delta 0), reused 0 (delta 0), pack-reused 0 (from 0)
+To github.com:Dayinu/additional_lab06.git
+   548801f..1311801  main -> main
+
 ```
