@@ -27,24 +27,43 @@ jobs:
         
     - name: Copy DLLs
       run: |
-        # Копируем все DLL из SFML и MinGW
+        # 1. Копируем все DLL из SFML
         Copy-Item "C:/SFML-2.5.1/bin/*.dll" -Destination "build/"
-        $MINGW_PATH = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
-        Copy-Item "$MINGW_PATH\*.dll" -Destination "build/"
         
-    - name: Verify dependencies
-      run: |
-        cd build
-        $MINGW_PATH = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
-        & "$MINGW_PATH\ldd.exe" arkanoid.exe
-        
-    - name: Run executable
-      run: |
-        # Запускаем без перенаправления, чтобы видеть вывод сразу
-        if (Test-Path build/Release/arkanoid.exe) {
-            cd build/Release
-            .\arkanoid.exe
+        # 2. Автоматически находим путь к MinGW и копируем его DLL
+        $mingwPath = (Get-ChildItem -Path "C:\ProgramData\chocolatey\lib\mingw" -Recurse -Filter "gcc.exe" | Select-Object -First 1).DirectoryName
+        if ($mingwPath) {
+            echo "Found MinGW at: $mingwPath"
+            Copy-Item "$mingwPath\*.dll" -Destination "build/"
         } else {
+            echo "::warning::MinGW path not found! Trying fallback..."
+            Copy-Item "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin\*.dll" -Destination "build/"
+        }
+        
+    - name: Verify DLLs
+      run: |
+        echo "Copied DLLs:"
+        ls build/*.dll
+        
+    - name: Run executable with debug
+      run: |
+        # Добавляем вывод в консоль перед запуском
+        echo "Current directory: $(Get-Location)"
+        echo "Files in build directory:"
+        ls build
+        
+        # Запускаем с диагностикой
+        if (Test-Path build/arkanoid.exe) {
             cd build
-            .\arkanoid.exe
+            # Запускаем через отладчик GDB для получения трассировки
+            $mingwPath = (Get-ChildItem -Path "C:\ProgramData\chocolatey\lib\mingw" -Recurse -Filter "gdb.exe" | Select-Object -First 1).DirectoryName
+            if ($mingwPath) {
+                & "$mingwPath\gdb.exe" -ex "set pagination off" -ex "run" -ex "bt" -ex "quit" --args .\arkanoid.exe
+            } else {
+                .\arkanoid.exe
+            }
+        } else {
+            echo "::error::Executable not found!"
+            Get-ChildItem -Path build -Recurse -Filter *.exe
+            exit 1
         }
