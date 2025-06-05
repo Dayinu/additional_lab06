@@ -11,8 +11,9 @@ jobs:
     - name: Install dependencies
       run: |
         choco install mingw -y --version 12.2.0
-        choco install cmake -y --installargs 'ADD_CMAKE_TO_PATH=System'
-        # Исправленная ссылка для SFML
+        # Устанавливаем CMake с добавлением в PATH
+        choco install cmake.install -y --installargs 'ADD_CMAKE_TO_PATH=System'
+        # Скачиваем SFML 2.5.1 для MinGW
         Invoke-WebRequest -Uri "https://github.com/SFML/SFML/releases/download/2.5.1/SFML-2.5.1-windows-mingw-64-bit.zip" -OutFile "sfml.zip"
         Expand-Archive -Path sfml.zip -DestinationPath C:/
     
@@ -24,9 +25,10 @@ jobs:
       run: |
         cmake --build build --config Release
         
-    - name: Copy DLLs (required for Windows)
+    - name: Copy DLLs
       run: |
-        Copy-Item "C:/SFML-3.0.0/bin/*.dll" -Destination "build/"
+        # Исправленный путь для SFML 2.5.1
+        Copy-Item "C:/SFML-2.5.1/bin/*.dll" -Destination "build/"
         
     - name: Run executable
       run: |
