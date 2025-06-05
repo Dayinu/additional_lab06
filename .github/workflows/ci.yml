@@ -13,7 +13,7 @@ jobs:
         choco install mingw -y --version 12.2.0
         choco install cmake -y --installargs 'ADD_CMAKE_TO_PATH=System'
         # Исправленная ссылка для SFML
-        Invoke-WebRequest -Uri "https://github.com/SFML/SFML/releases/download/2.5.1/SFML-2.5.1-windows-vc17-64-bit.zip" -OutFile "sfml.zip"
+        Invoke-WebRequest -Uri "https://github.com/SFML/SFML/releases/download/2.5.1/SFML-2.5.1-windows-mingw-64-bit.zip" -OutFile "sfml.zip"
         Expand-Archive -Path sfml.zip -DestinationPath C:/
     
     - name: Configure CMake
