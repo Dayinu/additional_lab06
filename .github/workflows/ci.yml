@@ -10,15 +10,10 @@ jobs:
     
     - name: Install dependencies
       run: |
-        # Установка MinGW (версия 8.1.0 для совместимости с SFML 2.5.1)
         choco install mingw -y --version 8.1.0
         choco install cmake -y --installargs 'ADD_CMAKE_TO_PATH=System'
-        
-        # Скачиваем SFML 2.5.1 для MinGW
         Invoke-WebRequest -Uri "https://github.com/SFML/SFML/releases/download/2.5.1/SFML-2.5.1-windows-gcc-7.3.0-mingw-64-bit.zip" -OutFile "sfml.zip"
         Expand-Archive -Path sfml.zip -DestinationPath C:/
-        
-        # Добавляем SFML в PATH
         echo "C:\SFML-2.5.1\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
     
     - name: Configure CMake
@@ -28,37 +23,28 @@ jobs:
         
     - name: Build
       run: |
-        cmake --build build --config Release
+        cmake --build build --config Release -j 2
         
-    
     - name: Copy DLLs
       run: |
-        # КОПИРУЕМ ВСЕ DLL БЕЗ ИСКЛЮЧЕНИЙ
+        # Копируем все DLL из SFML и MinGW
         Copy-Item "C:/SFML-2.5.1/bin/*.dll" -Destination "build/"
-
-    - name: Verify resources
+        $MINGW_PATH = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
+        Copy-Item "$MINGW_PATH\*.dll" -Destination "build/"
+        
+    - name: Verify dependencies
       run: |
-        echo "=== Checking build directory ==="
-        ls build
-        echo "=== Checking images ==="
-        ls build/images
+        cd build
+        $MINGW_PATH = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
+        & "$MINGW_PATH\ldd.exe" arkanoid.exe
         
     - name: Run executable
       run: |
-        # ПРОВЕРЯЕМ РАЗНЫЕ ВАРИАНТЫ РАСПОЛОЖЕНИЯ EXE-ФАЙЛА
+        # Запускаем без перенаправления, чтобы видеть вывод сразу
         if (Test-Path build/Release/arkanoid.exe) {
-            echo "Found executable in Release folder"
             cd build/Release
-            .\arkanoid.exe 2>&1 | tee output.log
-            cat output.log
-        } elseif (Test-Path build/arkanoid.exe) {
-            echo "Found executable in build root"
-            cd build
-            .\arkanoid.exe 2>&1 | tee output.log
-            cat output.log
+            .\arkanoid.exe
         } else {
-            echo "::error::Executable not found!"
-            echo "Searching for exe files:"
-            Get-ChildItem -Path build -Recurse -Filter *.exe
-            exit 1
+            cd build
+            .\arkanoid.exe
         }
