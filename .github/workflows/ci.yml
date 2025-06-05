@@ -30,28 +30,35 @@ jobs:
       run: |
         cmake --build build --config Release
         
+    
     - name: Copy DLLs
       run: |
-        # Копируем ВСЕ необходимые DLL
+        # КОПИРУЕМ ВСЕ DLL БЕЗ ИСКЛЮЧЕНИЙ
         Copy-Item "C:/SFML-2.5.1/bin/*.dll" -Destination "build/"
-        
-    # ДИАГНОСТИЧЕСКИЕ ШАГИ (после копирования DLL, перед запуском)
+
     - name: Verify resources
       run: |
-        # Проверка наличия изображений
-        echo "Checking images directory:"
+        echo "=== Checking build directory ==="
+        ls build
+        echo "=== Checking images ==="
         ls build/images
-        echo "Image files:"
-        ls build/images/*.*
-        
-        # Проверка скопированных DLL
-        echo "Copied DLLs:"
-        ls build/*.dll
         
     - name: Run executable
       run: |
-        cd build
-        # Запуск с записью логов
-        .\arkanoid.exe 2>&1 | tee output.log
-        echo "=== APPLICATION OUTPUT ==="
-        cat output.log
+        # ПРОВЕРЯЕМ РАЗНЫЕ ВАРИАНТЫ РАСПОЛОЖЕНИЯ EXE-ФАЙЛА
+        if (Test-Path build/Release/arkanoid.exe) {
+            echo "Found executable in Release folder"
+            cd build/Release
+            .\arkanoid.exe 2>&1 | tee output.log
+            cat output.log
+        } elseif (Test-Path build/arkanoid.exe) {
+            echo "Found executable in build root"
+            cd build
+            .\arkanoid.exe 2>&1 | tee output.log
+            cat output.log
+        } else {
+            echo "::error::Executable not found!"
+            echo "Searching for exe files:"
+            Get-ChildItem -Path build -Recurse -Filter *.exe
+            exit 1
+        }
