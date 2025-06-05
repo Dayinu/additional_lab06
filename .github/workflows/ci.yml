@@ -32,13 +32,26 @@ jobs:
         
     - name: Copy DLLs
       run: |
-        # Копируем DLL для SFML 2.5.1 (суффикс -2.dll)
-        $dlls = "sfml-system", "sfml-window", "sfml-graphics", "sfml-network", "sfml-audio"
-        foreach ($dll in $dlls) {
-            Copy-Item "C:/SFML-2.5.1/bin/$dll-2.dll" -Destination "build/"
-        }
+        # Копируем ВСЕ необходимые DLL
+        Copy-Item "C:/SFML-2.5.1/bin/*.dll" -Destination "build/"
+        
+    # ДИАГНОСТИЧЕСКИЕ ШАГИ (после копирования DLL, перед запуском)
+    - name: Verify resources
+      run: |
+        # Проверка наличия изображений
+        echo "Checking images directory:"
+        ls build/images
+        echo "Image files:"
+        ls build/images/*.*
+        
+        # Проверка скопированных DLL
+        echo "Copied DLLs:"
+        ls build/*.dll
         
     - name: Run executable
       run: |
         cd build
-        .\arkanoid.exe
+        # Запуск с записью логов
+        .\arkanoid.exe 2>&1 | tee output.log
+        echo "=== APPLICATION OUTPUT ==="
+        cat output.log
