@@ -10,15 +10,21 @@ jobs:
     
     - name: Install dependencies
       run: |
-        choco install mingw -y --version 12.2.0
-        choco install cmake.install -y --installargs 'ADD_CMAKE_TO_PATH=System'
-        # Исправленная ссылка для SFML 2.5.0 (MinGW)
-        Invoke-WebRequest -Uri "https://github.com/SFML/SFML/releases/download/2.5.0/SFML-2.5.0-windows-mingw-64-bit.zip" -OutFile "sfml.zip"
+        # Установка MinGW (версия 8.1.0 для совместимости с SFML 2.5.1)
+        choco install mingw -y --version 8.1.0
+        choco install cmake -y --installargs 'ADD_CMAKE_TO_PATH=System'
+        
+        # Скачиваем SFML 2.5.1 для MinGW
+        Invoke-WebRequest -Uri "https://github.com/SFML/SFML/releases/download/2.5.1/SFML-2.5.1-windows-gcc-7.3.0-mingw-64-bit.zip" -OutFile "sfml.zip"
         Expand-Archive -Path sfml.zip -DestinationPath C:/
+        
+        # Добавляем SFML в PATH
+        echo "C:\SFML-2.5.1\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
     
     - name: Configure CMake
       run: |
-        cmake -S . -B build -G "MinGW Makefiles" -DSFML_DIR="C:/SFML-2.5.0/lib/cmake/SFML"
+        cmake -S . -B build -G "MinGW Makefiles" `
+          -DSFML_DIR="C:/SFML-2.5.1/lib/cmake/SFML"
         
     - name: Build
       run: |
@@ -26,8 +32,13 @@ jobs:
         
     - name: Copy DLLs
       run: |
-        Copy-Item "C:/SFML-2.5.0/bin/*.dll" -Destination "build/"
+        # Копируем DLL для SFML 2.5.1 (суффикс -2.dll)
+        $dlls = "sfml-system", "sfml-window", "sfml-graphics", "sfml-network", "sfml-audio"
+        foreach ($dll in $dlls) {
+            Copy-Item "C:/SFML-2.5.1/bin/$dll-2.dll" -Destination "build/"
+        }
         
     - name: Run executable
       run: |
-        .\build\Release\arkanoid.exe
+        cd build
+        .\arkanoid.exe
