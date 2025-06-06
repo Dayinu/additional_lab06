@@ -70,19 +70,31 @@ jobs:
         
     - name: Copy resources
       run: |
-        # Копируем изображения
         Copy-Item -Path "images" -Destination "build/images" -Recurse -Force
         echo "Copied resources:"
         ls build/images
         
+    - name: Check dependencies
+      run: |
+        cd build
+        # Установка инструментов Visual Studio для dumpbin
+        choco install -y visualstudio2022-workload-vctools --no-progress
+        # Анализ зависимостей
+        dumpbin /dependents arkanoid.exe
+        
     - name: Run executable
       run: |
         cd build
-        # Запускаем с записью вывода
-        .\arkanoid.exe 2>&1 | tee output.log
-        # Всегда показываем лог
-        Get-Content output.log
-        # Проверяем код ошибки
+        if (-not (Test-Path .\arkanoid.exe)) {
+            Write-Error "Исполняемый файл arkanoid.exe не найден!"
+            exit 1
+        }
+        
+        # Запуск с перехватом вывода
+        $output = .\arkanoid.exe 2>&1
+        $output | Out-File output.log
+        $output
+        
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Application failed with exit code $LASTEXITCODE"
             exit $LASTEXITCODE
