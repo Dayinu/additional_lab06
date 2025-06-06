@@ -8,9 +8,15 @@ jobs:
     
     - name: Install dependencies
       run: |
+        # Устанавливаем MinGW и добавляем его в PATH
         choco install mingw -y --version 13.1.0 --no-progress
+        $mingwPath = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
+        echo "$mingwPath" >> $env:GITHUB_PATH
+        
+        # Устанавливаем CMake
         choco install cmake -y --installargs 'ADD_CMAKE_TO_PATH=System' --no-progress
         
+        # Устанавливаем SFML 2.6.1 (совместим с MinGW 13.1.0)
         if (-not (Test-Path C:/SFML-2.6.1)) {
             Invoke-WebRequest "https://github.com/SFML/SFML/releases/download/2.6.1/SFML-2.6.1-windows-gcc-13.1.0-mingw-64-bit.zip" -OutFile "sfml.zip"
             Expand-Archive sfml.zip -DestinationPath C:/ -Force
@@ -23,19 +29,36 @@ jobs:
     - name: Build
       run: cmake --build build --config Release --parallel
         
-    - name: Copy essential DLLs
+    - name: Find and copy MinGW DLLs
       run: |
-        $mingwRoot = "C:\ProgramData\chocolatey\lib\mingw\tools\install"
-        $mingwPath = Get-ChildItem -Path $mingwRoot -Recurse -Directory -Filter "bin" | 
-                    Where-Object { $_.FullName -like "*mingw64*bin" } | 
-                    Select-Object -First 1 -ExpandProperty FullName
+        # Ищем MinGW DLLs в нескольких возможных местах
+        $possiblePaths = @(
+            "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin",
+            "C:\tools\mingw64\bin",
+            "C:\msys64\mingw64\bin"
+        )
         
-        if (-not $mingwPath) {
-            Write-Error "Не удалось найти папку bin MinGW"
+        $foundPath = $null
+        foreach ($path in $possiblePaths) {
+            if (Test-Path $path) {
+                $foundPath = $path
+                break
+            }
+        }
+        
+        if (-not $foundPath) {
+            Write-Host "Не удалось найти папку MinGW bin, ищем рекурсивно..."
+            $foundPath = Get-ChildItem -Path "C:\" -Recurse -Directory -Filter "bin" -ErrorAction SilentlyContinue |
+                        Where-Object { $_.FullName -like "*mingw*" -and (Test-Path "$($_.FullName)\libgcc_s_seh-1.dll") } |
+                        Select-Object -First 1 -ExpandProperty FullName
+        }
+        
+        if (-not $foundPath) {
+            Write-Error "Не удалось найти папку MinGW bin с необходимыми DLL"
             exit 1
         }
         
-        Write-Host "Используемый путь MinGW: $mingwPath"
+        Write-Host "Найден путь к MinGW: $foundPath"
         
         $essentialDlls = @(
             "libgcc_s_seh-1.dll", 
@@ -44,24 +67,23 @@ jobs:
         )
         
         foreach ($dll in $essentialDlls) {
-            $dllPath = Join-Path $mingwPath $dll
+            $dllPath = Join-Path $foundPath $dll
             if (Test-Path $dllPath) {
                 Copy-Item $dllPath -Destination build -ErrorAction Stop
+                Write-Host "Скопировано: $dll"
             } else {
                 Write-Error "DLL не найдена: $dllPath"
                 exit 1
             }
         }
         
+        # Копируем системные и SFML DLL
         Copy-Item "C:\Windows\System32\vcruntime140.dll" -Destination build
         Copy-Item "C:/SFML-2.6.1/bin/*.dll" -Destination build/ -Force
         
-        Write-Host "Скопированные DLL:"
-        Get-ChildItem build/*.dll | Format-Table Name
-    
     - name: Install OpenAL
       run: |
-        $openalPath = "C:\openal32.dll"
+        $openalPath = "build/openal32.dll"
         if (-not (Test-Path $openalPath)) {
             Invoke-WebRequest "https://github.com/kcat/openal-soft/releases/download/1.23.1/openal-soft-1.23.1-bin.zip" -OutFile "openal.zip"
             Expand-Archive openal.zip -DestinationPath openal_tmp -Force
@@ -69,7 +91,6 @@ jobs:
             Copy-Item $dll.FullName -Destination $openalPath -Force
             Remove-Item openal.zip, openal_tmp -Recurse -Force
         }
-        Copy-Item $openalPath -Destination build/openal32.dll -Force
         
     - name: Verify dependencies
       run: |
@@ -107,5 +128,9 @@ jobs:
     - name: Run executable
       run: |
         cd build
-        Write-Host "Запуск arkanoid.exe"
+        Write-Host "Запуск arkanoid.exe с текущим PATH: $env:PATH"
         .\arkanoid.exe
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Приложение завершилось с ошибкой $LASTEXITCODE"
+            exit $LASTEXITCODE
+        }
