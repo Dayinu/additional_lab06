@@ -23,18 +23,21 @@ jobs:
     - name: Build
       run: cmake --build build --config Release --parallel
         
-    - name: Copy dependencies
+    - name: Copy essential DLLs
       run: |
-        # Копируем все необходимые DLL за одну операцию
-        $dlls = "libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll"
         $mingwPath = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
-        $dlls | ForEach-Object {
-            Copy-Item "$mingwPath\$_" -Destination build -ErrorAction Stop
+        $essentialDlls = @(
+            "libgcc_s_seh-1.dll", 
+            "libstdc++-6.dll", 
+            "libwinpthread-1.dll",
+            "vcruntime140.dll"
+        )
+        foreach ($dll in $essentialDlls) {
+            Copy-Item "$mingwPath\$dll" -Destination build -ErrorAction Stop
         }
         Copy-Item "C:/SFML-2.5.1/bin/*.dll" -Destination build/ -Force
         
-    - name: Install OpenAL (cached)
-      id: openal
+    - name: Install OpenAL
       run: |
         $openalPath = "C:\openal32.dll"
         if (-not (Test-Path $openalPath)) {
@@ -46,6 +49,50 @@ jobs:
         }
         Copy-Item $openalPath -Destination build/openal32.dll -Force
         
+    - name: Verify dependencies
+      run: |
+        cd build
+        
+        # Проверка исполняемого файла
+        if (-not (Test-Path arkanoid.exe)) {
+            Write-Error "Исполняемый файл arkanoid.exe не найден!"
+            exit 1
+        }
+        
+        # Проверка ресурсов
+        if (-not (Test-Path images)) {
+            Write-Error "Папка с ресурсами images не найдена!"
+            exit 1
+        }
+        
+        # Проверка обязательных DLL
+        $requiredDlls = @(
+            "sfml-graphics-2.dll", 
+            "sfml-window-2.dll", 
+            "sfml-system-2.dll", 
+            "sfml-audio-2.dll",
+            "openal32.dll", 
+            "libgcc_s_seh-1.dll", 
+            "libstdc++-6.dll", 
+            "vcruntime140.dll"
+        )
+        
+        $missing = @()
+        foreach ($dll in $requiredDlls) {
+            if (-not (Test-Path $dll)) {
+                $missing += $dll
+            }
+        }
+        
+        if ($missing.Count -gt 0) {
+            Write-Error "Отсутствуют следующие DLL: $($missing -join ', ')"
+            Write-Host "Список DLL в папке build:"
+            Get-ChildItem *.dll | Format-Table Name
+            exit 1
+        }
+        
+        Write-Host "Все зависимости проверены успешно"
+        
     - name: Copy resources
       run: |
         Copy-Item images -Destination build/images -Recurse -Force
@@ -54,23 +101,19 @@ jobs:
       run: |
         cd build
         
-        # Быстрая проверка ресурсов
-        if (-not (Test-Path images)) {
-            Write-Error "Resources directory missing!"
-            exit 1
-        }
-        
         # Запуск с таймаутом
         $process = Start-Process .\arkanoid.exe -NoNewWindow -PassThru
         $process | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
         
         if (-not $process.HasExited) {
             $process | Stop-Process -Force
-            Write-Error "Application timed out after 15 seconds"
+            Write-Error "Приложение зависло и было остановлено через 15 секунд"
             exit 1
         }
         
         if ($process.ExitCode -ne 0) {
-            Write-Error "Application failed with exit code $($process.ExitCode)"
+            Write-Error "Приложение завершилось с ошибкой $($process.ExitCode)"
             exit $process.ExitCode
         }
+        
+        Write-Host "Приложение успешно запущено!"
