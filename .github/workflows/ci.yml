@@ -8,11 +8,9 @@ jobs:
     
     - name: Install dependencies
       run: |
-        # Устанавливаем более новую версию MinGW
         choco install mingw -y --version 13.1.0 --no-progress
         choco install cmake -y --installargs 'ADD_CMAKE_TO_PATH=System' --no-progress
         
-        # Используем SFML 2.6.1 для совместимости с новым MinGW
         if (-not (Test-Path C:/SFML-2.6.1)) {
             Invoke-WebRequest "https://github.com/SFML/SFML/releases/download/2.6.1/SFML-2.6.1-windows-gcc-13.1.0-mingw-64-bit.zip" -OutFile "sfml.zip"
             Expand-Archive sfml.zip -DestinationPath C:/ -Force
@@ -27,22 +25,40 @@ jobs:
         
     - name: Copy essential DLLs
       run: |
-        $mingwPath = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
+        $mingwRoot = "C:\ProgramData\chocolatey\lib\mingw\tools\install"
+        $mingwPath = Get-ChildItem -Path $mingwRoot -Recurse -Directory -Filter "bin" | 
+                    Where-Object { $_.FullName -like "*mingw64*bin" } | 
+                    Select-Object -First 1 -ExpandProperty FullName
+        
+        if (-not $mingwPath) {
+            Write-Error "Не удалось найти папку bin MinGW"
+            exit 1
+        }
+        
+        Write-Host "Используемый путь MinGW: $mingwPath"
+        
         $essentialDlls = @(
             "libgcc_s_seh-1.dll", 
             "libstdc++-6.dll", 
             "libwinpthread-1.dll"
         )
+        
         foreach ($dll in $essentialDlls) {
-            Copy-Item "$mingwPath\$dll" -Destination build -ErrorAction Stop
+            $dllPath = Join-Path $mingwPath $dll
+            if (Test-Path $dllPath) {
+                Copy-Item $dllPath -Destination build -ErrorAction Stop
+            } else {
+                Write-Error "DLL не найдена: $dllPath"
+                exit 1
+            }
         }
         
-        # Копируем vcruntime из системной директории
         Copy-Item "C:\Windows\System32\vcruntime140.dll" -Destination build
-        
-        # Копируем DLL SFML
         Copy-Item "C:/SFML-2.6.1/bin/*.dll" -Destination build/ -Force
         
+        Write-Host "Скопированные DLL:"
+        Get-ChildItem build/*.dll | Format-Table Name
+    
     - name: Install OpenAL
       run: |
         $openalPath = "C:\openal32.dll"
@@ -61,7 +77,6 @@ jobs:
         Write-Host "Содержимое папки build:"
         Get-ChildItem
         
-        # Проверка DLL
         $requiredDlls = @(
             "sfml-graphics-2.dll", 
             "sfml-window-2.dll", 
@@ -85,8 +100,6 @@ jobs:
             exit 1
         }
         
-        Write-Host "Все зависимости на месте"
-        
     - name: Copy resources
       run: |
         Copy-Item images -Destination build/images -Recurse -Force
@@ -94,13 +107,5 @@ jobs:
     - name: Run executable
       run: |
         cd build
-        Write-Host "Запуск arkanoid.exe с текущим PATH: $env:PATH"
-        
-        # Запуск с отладочной информацией
+        Write-Host "Запуск arkanoid.exe"
         .\arkanoid.exe
-        $exitCode = $LASTEXITCODE
-        if ($exitCode -ne 0) {
-            Write-Error "Приложение завершилось с кодом $exitCode"
-            exit $exitCode
-        }
-        Write-Host "Приложение успешно выполнено"
