@@ -41,11 +41,33 @@ jobs:
         
     - name: Install OpenAL
       run: |
-        # Исправленная установка OpenAL
         $openalUrl = "https://github.com/kcat/openal-soft/releases/download/1.23.1/openal-soft-1.23.1-bin.zip"
         Invoke-WebRequest -Uri $openalUrl -OutFile "openal.zip"
         Expand-Archive -Path openal.zip -DestinationPath openal_tmp
-        Copy-Item "openal_tmp/x64/soft_oal.dll" -Destination "build/openal32.dll"
+        
+        # Проверка структуры папок
+        echo "Содержимое openal_tmp:"
+        ls openal_tmp -Recurse
+        
+        # Исправленный путь с проверкой
+        $sourcePath = "openal_tmp/bin/soft_oal.dll"
+        if (Test-Path $sourcePath) {
+            Copy-Item $sourcePath -Destination "build/openal32.dll"
+        } else {
+            Write-Error "Файл не найден: $sourcePath"
+            # Дополнительная проверка альтернативного пути (на всякий случай)
+            $altPath = "openal_tmp/x64/soft_oal.dll"
+            if (Test-Path $altPath) {
+                Write-Host "Найден альтернативный путь: $altPath"
+                Copy-Item $altPath -Destination "build/openal32.dll"
+            } else {
+                exit 1
+            }
+        }
+        
+        # Удаление временных файлов
+        Remove-Item openal.zip
+        Remove-Item openal_tmp -Recurse -Force
         
     - name: Verify DLLs
       run: |
