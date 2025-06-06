@@ -5,13 +5,10 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 15  # Общее ограничение времени
-    
     steps:
     - uses: actions/checkout@v4
     
     - name: Install dependencies
-      timeout-minutes: 5
       run: |
         choco install mingw -y --version 12.2.0 --no-progress
         choco install cmake -y --installargs 'ADD_CMAKE_TO_PATH=System' --no-progress
@@ -30,16 +27,32 @@ jobs:
       run: |
         cmake --build build --config Release --parallel
         
-    - name: Copy DLLs
+    - name: Copy essential DLLs
       run: |
-        Copy-Item "C:/SFML-2.5.1/bin/*.dll" -Destination "build/"
+        # Обязательные DLL из MinGW
         $mingwPath = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
-        if (Test-Path $mingwPath) {
-            Copy-Item "$mingwPath\*.dll" -Destination "build/"
+        $essentialDlls = "libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll"
+        foreach ($dll in $essentialDlls) {
+            Copy-Item "$mingwPath\$dll" -Destination "build/"
         }
         
+        # Все DLL из SFML
+        Copy-Item "C:/SFML-2.5.1/bin/*.dll" -Destination "build/"
+        
+    - name: Install OpenAL
+      run: |
+        # Устанавливаем OpenAL отдельно
+        Invoke-WebRequest -Uri "https://www.openal-soft.org/files/openal-soft-1.23.0-bin.zip" -OutFile "openal.zip"
+        Expand-Archive -Path openal.zip -DestinationPath openal_tmp
+        Copy-Item "openal_tmp/bin/Win64/soft_oal.dll" -Destination "build/openal32.dll"
+        
+    - name: Verify DLLs
+      run: |
+        echo "Essential DLLs:"
+        ls build/*.dll
+        echo "Total DLL count: $(@(ls build/*.dll).Count)"
+        
     - name: Run executable
-      timeout-minutes: 2
       run: |
         cd build
-        .\arkanoid.exe || echo "::error::Application failed with exit code $LASTEXITCODE"
+        .\arkanoid.exe
