@@ -45,24 +45,26 @@ jobs:
         Invoke-WebRequest -Uri $openalUrl -OutFile "openal.zip"
         Expand-Archive -Path openal.zip -DestinationPath openal_tmp
         
-        # Проверка структуры папок
-        echo "Содержимое openal_tmp:"
-        ls openal_tmp -Recurse
+        # Поиск файла по имени (предпочитаем Win64 версию)
+        $dllFile = Get-ChildItem -Path openal_tmp -Recurse -Filter "soft_oal.dll" | 
+                    Where-Object { $_.FullName -like "*Win64*" } | 
+                    Select-Object -First 1
         
-        # Исправленный путь с проверкой
-        $sourcePath = "openal_tmp/bin/soft_oal.dll"
-        if (Test-Path $sourcePath) {
-            Copy-Item $sourcePath -Destination "build/openal32.dll"
+        if ($null -eq $dllFile) {
+            # Если Win64 не найден, берем первую попавшуюся версию
+            $dllFile = Get-ChildItem -Path openal_tmp -Recurse -Filter "soft_oal.dll" | 
+                        Select-Object -First 1
+        }
+        
+        if ($dllFile) {
+            Copy-Item $dllFile.FullName -Destination "build/openal32.dll"
+            Write-Host "Файл найден и скопирован: $($dllFile.FullName)"
         } else {
-            Write-Error "Файл не найден: $sourcePath"
-            # Дополнительная проверка альтернативного пути (на всякий случай)
-            $altPath = "openal_tmp/x64/soft_oal.dll"
-            if (Test-Path $altPath) {
-                Write-Host "Найден альтернативный путь: $altPath"
-                Copy-Item $altPath -Destination "build/openal32.dll"
-            } else {
-                exit 1
-            }
+            Write-Error "Файл soft_oal.dll не найден в распакованных файлах"
+            # Вывод структуры для отладки
+            Write-Host "Содержимое openal_tmp:"
+            Get-ChildItem -Path openal_tmp -Recurse | Format-Table FullName
+            exit 1
         }
         
         # Удаление временных файлов
