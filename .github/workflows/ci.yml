@@ -41,16 +41,16 @@ jobs:
         
     - name: Install OpenAL
       run: |
-        # Устанавливаем OpenAL отдельно
-        Invoke-WebRequest -Uri "https://www.openal-soft.org/files/openal-soft-1.23.0-bin.zip" -OutFile "openal.zip"
+        # Исправленная установка OpenAL
+        $openalUrl = "https://github.com/kcat/openal-soft/releases/download/1.23.1/openal-soft-1.23.1-bin.zip"
+        Invoke-WebRequest -Uri $openalUrl -OutFile "openal.zip"
         Expand-Archive -Path openal.zip -DestinationPath openal_tmp
-        Copy-Item "openal_tmp/bin/Win64/soft_oal.dll" -Destination "build/openal32.dll"
+        Copy-Item "openal_tmp/x64/soft_oal.dll" -Destination "build/openal32.dll"
         
     - name: Verify DLLs
       run: |
         echo "Essential DLLs:"
         ls build/*.dll
-        echo "Total DLL count: $(@(ls build/*.dll).Count)"
         
     - name: Run executable
       run: |
