@@ -6,106 +6,86 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Install dependencies
+    - name: Установка MSYS2 и MinGW
       run: |
-        # Устанавливаем MinGW и добавляем его в PATH
-        choco install mingw -y --version 13.1.0 --no-progress
-        $mingwPath = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
-        echo "$mingwPath" >> $env:GITHUB_PATH
+        # Устанавливаем MSYS2 (включает MinGW)
+        choco install msys2 -y --params="/NoUpdate"
+        $msysPath = "C:\msys64"
+        echo "$msysPath\mingw64\bin" >> $env:GITHUB_PATH
         
-        # Устанавливаем CMake
-        choco install cmake -y --installargs 'ADD_CMAKE_TO_PATH=System' --no-progress
-        
-        # Устанавливаем SFML 2.6.1 (совместим с MinGW 13.1.0)
+        # Обновляем пакеты MSYS2 и устанавливаем MinGW
+        & "$msysPath\msys2_shell.cmd" -defterm -no-start -mingw64 -c "pacman -Syu --noconfirm"
+        & "$msysPath\msys2_shell.cmd" -defterm -no-start -mingw64 -c "pacman -S --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake"
+    
+    - name: Установка SFML
+      run: |
         if (-not (Test-Path C:/SFML-2.6.1)) {
             Invoke-WebRequest "https://github.com/SFML/SFML/releases/download/2.6.1/SFML-2.6.1-windows-gcc-13.1.0-mingw-64-bit.zip" -OutFile "sfml.zip"
             Expand-Archive sfml.zip -DestinationPath C:/ -Force
         }
         echo "C:\SFML-2.6.1\bin" >> $env:GITHUB_PATH
     
-    - name: Configure CMake
-      run: cmake -S . -B build -G "MinGW Makefiles" -DSFML_DIR="C:/SFML-2.6.1/lib/cmake/SFML"
-        
-    - name: Build
-      run: cmake --build build --config Release --parallel
-        
-    - name: Find and copy MinGW DLLs
+    - name: Настройка CMake
       run: |
-        # Ищем MinGW DLLs в нескольких возможных местах
-        $possiblePaths = @(
-            "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin",
-            "C:\tools\mingw64\bin",
-            "C:\msys64\mingw64\bin"
-        )
+        cmake -S . -B build -G "MinGW Makefiles" -DSFML_DIR="C:/SFML-2.6.1/lib/cmake/SFML"
         
-        $foundPath = $null
-        foreach ($path in $possiblePaths) {
-            if (Test-Path $path) {
-                $foundPath = $path
-                break
-            }
-        }
+    - name: Сборка проекта
+      run: |
+        cmake --build build --config Release --parallel
         
-        if (-not $foundPath) {
-            Write-Host "Не удалось найти папку MinGW bin, ищем рекурсивно..."
-            $foundPath = Get-ChildItem -Path "C:\" -Recurse -Directory -Filter "bin" -ErrorAction SilentlyContinue |
-                        Where-Object { $_.FullName -like "*mingw*" -and (Test-Path "$($_.FullName)\libgcc_s_seh-1.dll") } |
-                        Select-Object -First 1 -ExpandProperty FullName
-        }
+    - name: Копирование необходимых DLL
+      run: |
+        $mingwPath = "C:\msys64\mingw64\bin"
         
-        if (-not $foundPath) {
-            Write-Error "Не удалось найти папку MinGW bin с необходимыми DLL"
-            exit 1
-        }
-        
-        Write-Host "Найден путь к MinGW: $foundPath"
-        
-        $essentialDlls = @(
-            "libgcc_s_seh-1.dll", 
-            "libstdc++-6.dll", 
+        # Основные DLL MinGW
+        $mingwDlls = @(
+            "libgcc_s_seh-1.dll",
+            "libstdc++-6.dll",
             "libwinpthread-1.dll"
         )
         
-        foreach ($dll in $essentialDlls) {
-            $dllPath = Join-Path $foundPath $dll
+        foreach ($dll in $mingwDlls) {
+            $dllPath = Join-Path $mingwPath $dll
             if (Test-Path $dllPath) {
-                Copy-Item $dllPath -Destination build -ErrorAction Stop
+                Copy-Item $dllPath -Destination build
                 Write-Host "Скопировано: $dll"
             } else {
-                Write-Error "DLL не найдена: $dllPath"
-                exit 1
+                Write-Host "Предупреждение: $dll не найдена, попытка установить..."
+                & "C:\msys64\msys2_shell.cmd" -defterm -no-start -mingw64 -c "pacman -S --noconfirm mingw-w64-x86_64-gcc-libs"
+                if (Test-Path $dllPath) {
+                    Copy-Item $dllPath -Destination build
+                } else {
+                    Write-Error "Не удалось найти $dll после установки gcc-libs"
+                    exit 1
+                }
             }
         }
         
-        # Копируем системные и SFML DLL
+        # Системные DLL
         Copy-Item "C:\Windows\System32\vcruntime140.dll" -Destination build
-        Copy-Item "C:/SFML-2.6.1/bin/*.dll" -Destination build/ -Force
         
-    - name: Install OpenAL
-      run: |
-        $openalPath = "build/openal32.dll"
-        if (-not (Test-Path $openalPath)) {
-            Invoke-WebRequest "https://github.com/kcat/openal-soft/releases/download/1.23.1/openal-soft-1.23.1-bin.zip" -OutFile "openal.zip"
-            Expand-Archive openal.zip -DestinationPath openal_tmp -Force
-            $dll = Get-ChildItem openal_tmp -Recurse -Filter "soft_oal.dll" | Select-Object -First 1
-            Copy-Item $dll.FullName -Destination $openalPath -Force
-            Remove-Item openal.zip, openal_tmp -Recurse -Force
+        # DLL SFML
+        Copy-Item "C:\SFML-2.6.1\bin\*.dll" -Destination build -Force
+        
+        # OpenAL (если нужно)
+        if (-not (Test-Path "build\openal32.dll")) {
+            Copy-Item "C:\SFML-2.6.1\bin\openal32.dll" -Destination build -ErrorAction SilentlyContinue
         }
-        
-    - name: Verify dependencies
+    
+    - name: Проверка зависимостей
       run: |
         cd build
         Write-Host "Содержимое папки build:"
         Get-ChildItem
         
         $requiredDlls = @(
-            "sfml-graphics-2.dll", 
-            "sfml-window-2.dll", 
-            "sfml-system-2.dll", 
+            "sfml-graphics-2.dll",
+            "sfml-window-2.dll",
+            "sfml-system-2.dll",
             "sfml-audio-2.dll",
-            "openal32.dll", 
-            "libgcc_s_seh-1.dll", 
-            "libstdc++-6.dll", 
+            "libgcc_s_seh-1.dll",
+            "libstdc++-6.dll",
+            "libwinpthread-1.dll",
             "vcruntime140.dll"
         )
         
@@ -121,16 +101,17 @@ jobs:
             exit 1
         }
         
-    - name: Copy resources
+    - name: Копирование ресурсов
       run: |
         Copy-Item images -Destination build/images -Recurse -Force
         
-    - name: Run executable
+    - name: Запуск приложения
       run: |
         cd build
-        Write-Host "Запуск arkanoid.exe с текущим PATH: $env:PATH"
+        Write-Host "Запуск arkanoid.exe..."
         .\arkanoid.exe
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Приложение завершилось с ошибкой $LASTEXITCODE"
             exit $LASTEXITCODE
         }
+        Write-Host "Приложение успешно выполнено!"
