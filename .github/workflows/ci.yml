@@ -27,23 +27,23 @@ jobs:
       run: |
         $mingwPath = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
         $essentialDlls = @(
-            "libgcc_s_seh-1.dll", 
-            "libstdc++-6.dll", 
-            "libwinpthread-1.dll"
+          "libgcc_s_seh-1.dll", 
+          "libstdc++-6.dll", 
+          "libwinpthread-1.dll"
         )
         foreach ($dll in $essentialDlls) {
-            Copy-Item "$mingwPath\$dll" -Destination build -ErrorAction Stop
+        Copy-Item "$mingwPath\$dll" -Destination build -ErrorAction Stop
         }
-        
+    
         # Копируем vcruntime из системной директории
         $vcruntimePath = "C:\Windows\System32\vcruntime140.dll"
         if (Test-Path $vcruntimePath) {
             Copy-Item $vcruntimePath -Destination build
         } else {
-            Write-Error "vcruntime140.dll not found in System32"
+            Write-Error "vcruntime140.dll не найден в System32"
             exit 1
         }
-        
+    
         Copy-Item "C:/SFML-2.5.1/bin/*.dll" -Destination build/ -Force
         
     - name: Install OpenAL
@@ -64,13 +64,13 @@ jobs:
         
         # Проверка исполняемого файла
         if (-not (Test-Path arkanoid.exe)) {
-            Write-Error "Executable file arkanoid.exe not found!"
+            Write-Error "Исполняемый файл arkanoid.exe не найден!"
             exit 1
         }
         
         # Проверка ресурсов
         if (-not (Test-Path images)) {
-            Write-Error "Resource directory images not found!"
+            Write-Error "Папка с ресурсами images не найдена!"
             exit 1
         }
         
@@ -94,13 +94,13 @@ jobs:
         }
         
         if ($missing.Count -gt 0) {
-            Write-Error "Missing DLLs: $($missing -join ', ')"
-            Write-Host "DLLs present in build directory:"
+            Write-Error "Отсутствуют следующие DLL: $($missing -join ', ')"
+            Write-Host "Список DLL в папке build:"
             Get-ChildItem *.dll | Format-Table Name
             exit 1
         }
         
-        Write-Host "All dependencies verified successfully"
+        Write-Host "Все зависимости проверены успешно"
         
     - name: Copy resources
       run: |
@@ -116,13 +116,13 @@ jobs:
         
         if (-not $process.HasExited) {
             $process | Stop-Process -Force
-            Write-Error "Application timed out after 15 seconds"
+            Write-Error "Приложение зависло и было остановлено через 15 секунд"
             exit 1
         }
         
         if ($process.ExitCode -ne 0) {
-            Write-Error "Application failed with exit code $($process.ExitCode)"
+            Write-Error "Приложение завершилось с ошибкой $($process.ExitCode)"
             exit $process.ExitCode
         }
         
-        Write-Host "Application ran successfully!"
+        Write-Host "Приложение успешно запущено!"
