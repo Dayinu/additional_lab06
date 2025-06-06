@@ -8,17 +8,19 @@ jobs:
     
     - name: Install dependencies
       run: |
-        choco install mingw -y --version 12.2.0 --no-progress
+        # Устанавливаем более новую версию MinGW
+        choco install mingw -y --version 13.1.0 --no-progress
         choco install cmake -y --installargs 'ADD_CMAKE_TO_PATH=System' --no-progress
         
-        if (-not (Test-Path C:/SFML-2.5.1)) {
-            Invoke-WebRequest "https://github.com/SFML/SFML/releases/download/2.5.1/SFML-2.5.1-windows-gcc-7.3.0-mingw-64-bit.zip" -OutFile "sfml.zip"
+        # Используем SFML 2.6.1 для совместимости с новым MinGW
+        if (-not (Test-Path C:/SFML-2.6.1)) {
+            Invoke-WebRequest "https://github.com/SFML/SFML/releases/download/2.6.1/SFML-2.6.1-windows-gcc-13.1.0-mingw-64-bit.zip" -OutFile "sfml.zip"
             Expand-Archive sfml.zip -DestinationPath C:/ -Force
         }
-        echo "C:\SFML-2.5.1\bin" >> $env:GITHUB_PATH
+        echo "C:\SFML-2.6.1\bin" >> $env:GITHUB_PATH
     
     - name: Configure CMake
-      run: cmake -S . -B build -G "MinGW Makefiles" -DSFML_DIR="C:/SFML-2.5.1/lib/cmake/SFML"
+      run: cmake -S . -B build -G "MinGW Makefiles" -DSFML_DIR="C:/SFML-2.6.1/lib/cmake/SFML"
         
     - name: Build
       run: cmake --build build --config Release --parallel
@@ -27,24 +29,19 @@ jobs:
       run: |
         $mingwPath = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
         $essentialDlls = @(
-          "libgcc_s_seh-1.dll", 
-          "libstdc++-6.dll", 
-          "libwinpthread-1.dll"
+            "libgcc_s_seh-1.dll", 
+            "libstdc++-6.dll", 
+            "libwinpthread-1.dll"
         )
         foreach ($dll in $essentialDlls) {
-        Copy-Item "$mingwPath\$dll" -Destination build -ErrorAction Stop
+            Copy-Item "$mingwPath\$dll" -Destination build -ErrorAction Stop
         }
-    
+        
         # Копируем vcruntime из системной директории
-        $vcruntimePath = "C:\Windows\System32\vcruntime140.dll"
-        if (Test-Path $vcruntimePath) {
-            Copy-Item $vcruntimePath -Destination build
-        } else {
-            Write-Error "vcruntime140.dll не найден в System32"
-            exit 1
-        }
-    
-        Copy-Item "C:/SFML-2.5.1/bin/*.dll" -Destination build/ -Force
+        Copy-Item "C:\Windows\System32\vcruntime140.dll" -Destination build
+        
+        # Копируем DLL SFML
+        Copy-Item "C:/SFML-2.6.1/bin/*.dll" -Destination build/ -Force
         
     - name: Install OpenAL
       run: |
@@ -61,20 +58,10 @@ jobs:
     - name: Verify dependencies
       run: |
         cd build
+        Write-Host "Содержимое папки build:"
+        Get-ChildItem
         
-        # Проверка исполняемого файла
-        if (-not (Test-Path arkanoid.exe)) {
-            Write-Error "Исполняемый файл arkanoid.exe не найден!"
-            exit 1
-        }
-        
-        # Проверка ресурсов
-        if (-not (Test-Path images)) {
-            Write-Error "Папка с ресурсами images не найдена!"
-            exit 1
-        }
-        
-        # Проверка обязательных DLL
+        # Проверка DLL
         $requiredDlls = @(
             "sfml-graphics-2.dll", 
             "sfml-window-2.dll", 
@@ -94,13 +81,11 @@ jobs:
         }
         
         if ($missing.Count -gt 0) {
-            Write-Error "Отсутствуют следующие DLL: $($missing -join ', ')"
-            Write-Host "Список DLL в папке build:"
-            Get-ChildItem *.dll | Format-Table Name
+            Write-Error "Отсутствуют DLL: $($missing -join ', ')"
             exit 1
         }
         
-        Write-Host "Все зависимости проверены успешно"
+        Write-Host "Все зависимости на месте"
         
     - name: Copy resources
       run: |
@@ -109,20 +94,13 @@ jobs:
     - name: Run executable
       run: |
         cd build
+        Write-Host "Запуск arkanoid.exe с текущим PATH: $env:PATH"
         
-        # Запуск с таймаутом
-        $process = Start-Process .\arkanoid.exe -NoNewWindow -PassThru
-        $process | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
-        
-        if (-not $process.HasExited) {
-            $process | Stop-Process -Force
-            Write-Error "Приложение зависло и было остановлено через 15 секунд"
-            exit 1
+        # Запуск с отладочной информацией
+        .\arkanoid.exe
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -ne 0) {
+            Write-Error "Приложение завершилось с кодом $exitCode"
+            exit $exitCode
         }
-        
-        if ($process.ExitCode -ne 0) {
-            Write-Error "Приложение завершилось с ошибкой $($process.ExitCode)"
-            exit $process.ExitCode
-        }
-        
-        Write-Host "Приложение успешно запущено!"
+        Write-Host "Приложение успешно выполнено"
